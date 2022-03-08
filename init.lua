@@ -106,7 +106,6 @@ function PNG.new(buffer)
 	while file.Reading do
 		local length = reader:ReadInt32()
 		local chunkType = reader:ReadString(4)
-		print(length, chunkType)
 		local data, crc
 		if length > 0 then
 			data = reader:ForkReader(length)
