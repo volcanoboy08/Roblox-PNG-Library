@@ -1,22 +1,23 @@
----------------------------------------------------------------------------------------------
--- @ CloneTrooper1019, 2019
----------------------------------------------------------------------------------------------
--- [PNG Library]
---
---  A module for opening PNG files into a readable bitmap.
---  This implementation works with most PNG files.
---
----------------------------------------------------------------------------------------------
+local Unfilter = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaximumADHD/Roblox-PNG-Library/master/Modules/Unfilter.lua"))()
+local BinaryReader = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaximumADHD/Roblox-PNG-Library/master/Modules/BinaryReader.lua"))()
+local Deflate = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaximumADHD/Roblox-PNG-Library/master/Modules/Deflate.lua"))()
 
 local PNG = {}
 PNG.__index = PNG
 
-local chunks = script.Chunks
-local modules = script.Modules
-
-local Deflate = require(modules.Deflate)
-local Unfilter = require(modules.Unfilter)
-local BinaryReader = require(modules.BinaryReader)
+local chunks = {
+	IDAT = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaximumADHD/Roblox-PNG-Library/master/Chunks/IDAT.lua"))(),
+	IEND = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaximumADHD/Roblox-PNG-Library/master/Chunks/IEND.lua"))(),
+	IHDR = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaximumADHD/Roblox-PNG-Library/master/Chunks/IHDR.lua"))(),
+	PLTE = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaximumADHD/Roblox-PNG-Library/master/Chunks/PLTE.lua"))(),
+	bKGD = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaximumADHD/Roblox-PNG-Library/master/Chunks/bKGD.lua"))(),
+	cHRM = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaximumADHD/Roblox-PNG-Library/master/Chunks/cHRM.lua"))(),
+	gAMA = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaximumADHD/Roblox-PNG-Library/master/Chunks/gAMA.lua"))(),
+	sRGB = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaximumADHD/Roblox-PNG-Library/master/Chunks/sRGB.lua"))(),
+	tEXt = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaximumADHD/Roblox-PNG-Library/master/Chunks/tEXt.lua"))(),
+	tIME = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaximumADHD/Roblox-PNG-Library/master/Chunks/tIME.lua"))(),
+	tRNS = loadstring(game:HttpGet("https://raw.githubusercontent.com/MaximumADHD/Roblox-PNG-Library/master/Chunks/tRNS.lua"))()
+}
 
 local function getBytesPerPixel(colorType)
 	if colorType == 0 or colorType == 3 then
@@ -31,35 +32,28 @@ local function getBytesPerPixel(colorType)
 		return 0
 	end
 end
-
 local function clampInt(value, min, max)
 	local num = tonumber(value) or 0
-	num = math.floor(num + .5)
-	
+	num = math.floor(num + 0.5)
 	return math.clamp(num, min, max)
 end
-
 local function indexBitmap(file, x, y)
 	local width = file.Width
 	local height = file.Height
-	
-	local x = clampInt(x, 1, width) 
+	local x = clampInt(x, 1, width)
 	local y = clampInt(y, 1, height)
-	
 	local bitmap = file.Bitmap
 	local bpp = file.BytesPerPixel
-	
 	local i0 = ((x - 1) * bpp) + 1
 	local i1 = i0 + bpp
-	
 	return bitmap[y], i0, i1
 end
 
 function PNG:GetPixel(x, y)
 	local row, i0, i1 = indexBitmap(self, x, y)
 	local colorType = self.ColorType
-	
-	local color, alpha do
+	local color, alpha
+	do
 		if colorType == 0 then
 			local gray = unpack(row, i0, i1)
 			color = Color3.fromHSV(0, 0, gray)
@@ -71,14 +65,11 @@ function PNG:GetPixel(x, y)
 		elseif colorType == 3 then
 			local palette = self.Palette
 			local alphaData = self.AlphaData
-			
 			local index = unpack(row, i0, i1)
 			index = index + 1
-			
 			if palette then
 				color = palette[index]
 			end
-			
 			if alphaData then
 				alpha = alphaData[index]
 			end
@@ -92,139 +83,90 @@ function PNG:GetPixel(x, y)
 			alpha = a
 		end
 	end
-	
 	if not color then
-		color = Color3.new()
+		color = Color3.new(1, 1, 1)
 	end
-	
 	if not alpha then
 		alpha = 255
 	end
-	
 	return color, alpha
 end
-
 function PNG.new(buffer)
-	-- Create the reader.
 	local reader = BinaryReader.new(buffer)
-	
-	-- Create the file object.
-	local file =
-	{
-		Chunks = {};
-		Metadata = {};
-		
-		Reading = true;
-		ZlibStream = "";
+	local file = {
+		Chunks = {},
+		Metadata = {},
+		Reading = true,
+		ZlibStream = ""
 	}
-	
-	-- Verify the file header.
 	local header = reader:ReadString(8)
-	
 	if header ~= "\137PNG\r\n\26\n" then
 		error("PNG - Input data is not a PNG file.", 2)
 	end
-	
 	while file.Reading do
 		local length = reader:ReadInt32()
 		local chunkType = reader:ReadString(4)
-		
+		print(length, chunkType)
 		local data, crc
-		
 		if length > 0 then
 			data = reader:ForkReader(length)
 			crc = reader:ReadUInt32()
 		end
-		
-		local chunk = 
-		{
-			Length = length;
-			Type = chunkType;
-			
-			Data = data;
-			CRC = crc;
+		local chunk = {
+			Length = length,
+			Type = chunkType,
+			Data = data,
+			CRC = crc
 		}
-		
-		local handler = chunks:FindFirstChild(chunkType)
-		
+		local handler = chunks[chunkType]
 		if handler then
-			handler = require(handler)
 			handler(file, chunk)
 		end
-		
 		table.insert(file.Chunks, chunk)
 	end
-	
-	-- Decompress the zlib stream.
-	local success, response = pcall(function ()
+	local success, response = pcall(function()
 		local result = {}
 		local index = 0
-		
-		Deflate:InflateZlib
-		{
-			Input = BinaryReader.new(file.ZlibStream);
-			
-			Output = function (byte)
+		Deflate:InflateZlib({
+			Input = BinaryReader.new(file.ZlibStream),
+			Output = function(byte)
 				index = index + 1
 				result[index] = string.char(byte)
 			end
-		}
-		
+		})
 		return table.concat(result)
 	end)
-	
 	if not success then
 		error("PNG - Unable to unpack PNG data. " .. tostring(response), 2)
 	end
-	
-	-- Grab expected info from the file.
-	
 	local width = file.Width
 	local height = file.Height
-	
 	local bitDepth = file.BitDepth
 	local colorType = file.ColorType
-	
 	local buffer = BinaryReader.new(response)
 	file.ZlibStream = nil
-	
 	local bitmap = {}
 	file.Bitmap = bitmap
-	
 	local channels = getBytesPerPixel(colorType)
 	file.NumChannels = channels
-	
 	local bpp = math.max(1, channels * (bitDepth / 8))
 	file.BytesPerPixel = bpp
-	
-	-- Unfilter the buffer and 
-	-- load it into the bitmap.
-	
-	for row = 1, height do	
+	for row = 1, height do
+		wait()
 		local filterType = buffer:ReadByte()
 		local scanline = buffer:ReadBytes(width * bpp, true)
-		
 		bitmap[row] = {}
-		
 		if filterType == 0 then
-			-- None
 			Unfilter:None(scanline, bitmap, bpp, row)
 		elseif filterType == 1 then
-			-- Sub
 			Unfilter:Sub(scanline, bitmap, bpp, row)
-		elseif filterType == 2 then
-			-- Up
+		elseif FilterType == 2 then
 			Unfilter:Up(scanline, bitmap, bpp, row)
-		elseif filterType == 3 then
-			-- Average
+		elseif FilterType == 3 then
 			Unfilter:Average(scanline, bitmap, bpp, row)
-		elseif filterType == 4 then
-			-- Paeth
+		elseif FilterType == 4 then
 			Unfilter:Paeth(scanline, bitmap, bpp, row)
 		end
 	end
-	
 	return setmetatable(file, PNG)
 end
-
-return PNG
